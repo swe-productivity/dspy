@@ -1,28 +1,17 @@
-default_language_version:
-  python: python3.10
-
-default_stages: [pre-commit]
-default_install_hook_types: [pre-commit]
+# Configure pre-commit to reuse the AI indicator guard scripts.
+# Both hooks run locally from .config/ai-hooks.
 
 repos:
   - repo: local
     hooks:
-      - id: ruff-check
-        name: ruff (lint)
-        entry: ruff
+      - id: ai-pre-commit
+        name: Block AI indicators in staged files
+        entry: python3 .config/git-hooks/ai_guard.py pre-commit
         language: system
-        types_or: [python, pyi]
-        files: ^(dspy|tests)/.*\.py$
-        exclude: ^(dspy/__metadata__\.py|tests/reliability/.*\.py)$
-        args: [check, --fix-only]
-
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
-    hooks:
-      - id: check-yaml
-        args: ["--allow-multiple-documents", "--unsafe"]
-      - id: check-toml
-      - id: check-added-large-files
-        args: ["--maxkb=1024"]
-      - id: check-merge-conflict
-      - id: debug-statements
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: ai-commit-msg
+        name: Block AI indicators in commit messages
+        entry: python3 .config/git-hooks/ai_guard.py commit-msg
+        language: system
+        stages: [commit-msg]
