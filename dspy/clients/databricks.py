@@ -55,6 +55,14 @@ class DatabricksProvider(Provider):
         databricks_token: str | None = None,
         deploy_timeout: int = 900,
     ):
+        """
+        Args:
+            model: Name of the model as stored in the databricks store
+            data_format: One of TrainDataFormat.CHAT or TrainDataFormat.COMPLETION based on what the model's supposed to do
+            databricks_host: URL of databricks host. Useful in case of hosted runtime
+            databricks_token: Databrick token
+            deploy_timeout: Time in seconds. Deployment is cancelled if this time period exceeds. (Default: 900s)
+        """
         workspace_client = _get_workspace_client()
         model_version = next(workspace_client.model_versions.list(model)).version
 
@@ -172,6 +180,22 @@ class DatabricksProvider(Provider):
         train_data_format: TrainDataFormat | str | None = "chat",
         train_kwargs: dict[str, Any] | None = None,
     ) -> str:
+        """
+        Args:
+            job (TrainingJobDatabricks): Training job to be finetuned
+            model: Model name
+            train_data (list[dict[str, Any]]): Training data
+            train_data_format: One of "chat" or "completion" (Default: "chat")
+            train_kwargs: Can take following options:
+                1. train_data_path: path to training data in Databricks provider
+                2. register_to: Required for finetune on Databricks
+                3. databricks_host (Optional): Databricks host URL
+                4. databricks_token (Optional): Databricks Token
+                5. skip_deploy (Optional): Skip deploying the model. (Default: False)
+                6. deploy_timeout (Optional): Time in seconds. (Default: 900s)
+        Returns:
+            str: Path to the model in the format "databricks/{job.endpoint_name}"
+        """
         if isinstance(train_data_format, str):
             if train_data_format == "chat":
                 train_data_format = TrainDataFormat.CHAT
@@ -303,6 +327,10 @@ def _create_directory_in_databricks_unity_catalog(w: "WorkspaceClient", databric
 
 
 def _save_data_to_local_file(train_data: list[dict[str, Any]], data_format: TrainDataFormat):
+    """
+    Save train_data to a local file in JSON lines format with follwing filename: "finetuning_{UUID}.jsonl". UUID
+    here is based on UUID Version 4 of RFC 9562
+    """
     import uuid
 
     file_name = f"finetuning_{uuid.uuid4()}.jsonl"
@@ -322,6 +350,11 @@ def _save_data_to_local_file(train_data: list[dict[str, Any]], data_format: Trai
 
 
 def _validate_chat_data(data: dict[str, Any]):
+    """
+    This function raises a ValueError exception if data is malformed in these ways:
+    1. Data must be a dict with a 'messages' key
+    2. Value of 'messages' key must be a dict with 'role' and 'content' keys
+    """
     if "messages" not in data:
         raise ValueError(
             "Each finetuning data must be a dict with a 'messages' key when `task=CHAT_COMPLETION`, but "
@@ -344,6 +377,11 @@ def _validate_chat_data(data: dict[str, Any]):
 
 
 def _validate_completion_data(data: dict[str, Any]):
+    """
+    This function raises a ValueError exception if data is malformed in these ways:
+    1. Data must be a dict with a 'prompt' key.
+    2. Value of 'prompt' key must be a dict with 'response' and 'completion' keys
+    """
     if "prompt" not in data:
         raise ValueError(
             "Each finetuning data must be a dict with a 'prompt' key when `task=INSTRUCTION_FINETUNE`, but "
