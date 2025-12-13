@@ -1,3 +1,5 @@
+## Miscellaneous utilities for the simba optimizer
+
 import inspect
 import logging
 import textwrap
@@ -32,6 +34,21 @@ def prepare_models_for_resampling(program: dspy.Module, n: int, teacher_settings
     return models
 
 def wrap_program(program: dspy.Module, metric: Callable):
+    """
+    Wraps a program into a function that returns a dictionary of various metrics
+
+    Args:
+        program (dspy.Module): dspy.Module that contains instructions to run the LM.
+        metric (Callable[str,str]): A function that takes examples from your data and output of the LM and compares them
+    Returns:
+        A functions that returns a dict with the following keys when called: {
+            "prediction",
+            "trace",
+            "score",
+            "example",
+            "output_metadata",
+        }
+    """
     def wrapped_program(example):
         with dspy.context(trace=[]):
             prediction, trace, score = None, None, 0.0
@@ -71,6 +88,21 @@ def wrap_program(program: dspy.Module, metric: Callable):
     return wrapped_program
 
 def append_a_demo(demo_input_field_maxlen):
+    """
+    One of the strategies (chosen at random) of the SIMBA optimizer. The other one is append_a_rule
+    Args:
+        demo_input_field_maxlen: Max length of characters in the input field
+    Returns:
+        A function of the following form:
+        Args:
+            bucket: A list of dictionaries with atleast a "score" key
+            system: A program selected from a list of programs on the basis of softmax sampling of top k baseline candidates
+            predictor2name: A dict that maps predictors to their names
+            name2predictor: A dict that maps names to their predictors
+            batch_10p_score: 10th percentile score
+        Returns:
+            bool: True if demo successful, False if bucket[0] score is less than 10th percentile
+    """
     def append_a_demo_(bucket, system, **kwargs):
         predictor2name, name2predictor = kwargs["predictor2name"], kwargs["name2predictor"]
         batch_10p_score = kwargs["batch_10p_score"]
@@ -104,6 +136,17 @@ def append_a_demo(demo_input_field_maxlen):
 
 
 def append_a_rule(bucket, system, **kwargs):
+    """
+    One of the strategies (chosen at random) of the SIMBA optimizer. The other one is append_a_demo
+    Args:
+        bucket: A list of dictionaries with atleast a "score" key
+        system: A program selected from a list of programs on the basis of softmax sampling of top k baseline candidates
+        predictor2name: A dict that maps predictors to their names
+        name2predictor: A dict that maps names to their predictors
+        batch_10p_score: 10th percentile score
+    Returns:
+        bool: True if demo successful, False if bucket[0] score is less than 10th percentile or greater than 90th percentile
+    """
     predictor2name = kwargs["predictor2name"]
     batch_10p_score, batch_90p_score = kwargs["batch_10p_score"], kwargs["batch_90p_score"]
     prompt_model = kwargs["prompt_model"] or dspy.settings.lm
@@ -208,6 +251,12 @@ class OfferFeedback(dspy.Signature):
     )
 
 def inspect_modules(program):
+    """
+    Args:
+        program (dspy.Module): A dspy.Module
+    Returns:
+        str: A listing of input_fields and output_fields from program.named_predictors
+    """
     separator = "-" * 80
     output = [separator]
 
