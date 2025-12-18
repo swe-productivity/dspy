@@ -504,7 +504,7 @@ class GEPA(Teleprompter):
         logger.info(f"Using {len(valset)} examples for tracking Pareto scores. You can consider using a smaller sample of the valset to allow GEPA to explore more diverse solutions within the same budget. GEPA requires you to provide the smallest valset that is just large enough to match your downstream task distribution, while providing as large trainset as possible.")
 
         rng = random.Random(self.seed)
-
+                
         def feedback_fn_creator(pred_name: str, predictor) -> "PredictorFeedbackFn":
             def feedback_fn(
                 predictor_output: dict[str, Any],
@@ -521,6 +521,7 @@ class GEPA(Teleprompter):
                     pred_name,
                     trace_for_pred,
                 )
+
                 if hasattr(o, "feedback"):
                     if o["feedback"] is None:
                         o["feedback"] = f"This trajectory got a score of {o['score']}."
