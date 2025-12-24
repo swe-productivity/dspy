@@ -1,5 +1,6 @@
 import csv
 import importlib
+import inspect
 import json
 import logging
 import types
@@ -169,7 +170,11 @@ class Evaluate:
 
         def process_item(example):
             prediction = program(**example.inputs())
-            score = metric(example, prediction)
+            if inspect.iscoroutinefunction(metric):
+                from dspy.utils.syncify import run_async
+                score = run_async(metric(example, prediction))
+            else:
+                score = metric(example, prediction)
             return prediction, score
 
         results = executor.execute(process_item, devset)
