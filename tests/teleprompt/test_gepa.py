@@ -521,3 +521,33 @@ def test_alternating_half_component_selector():
             # Odd iteration should select second half: ["generator"]
             assert "generator" in selection["selected"], f"Odd iteration {selection['iteration']} should include generator"
             assert "classifier" not in selection["selected"], f"Odd iteration {selection['iteration']} should not include classifier"
+
+
+async def async_metric(example, prediction, trace=None, pred_name=None, pred_trace=None):
+    """Async version of simple_metric for testing async support."""
+    import asyncio
+    await asyncio.sleep(0.001)
+    return dspy.Prediction(score=example.output == prediction.output, feedback="Async feedback")
+
+
+def test_gepa_with_async_metric():
+    """Test that GEPA can work with async metrics."""
+    student = SimpleModule("input -> output")
+
+    task_lm = DummyLM([{"output": "blue"}, {"output": "Ring-ding-ding-ding-dingeringeding!"}] * 10)
+    reflection_lm = DummyLM([{"improved_instruction": "Better instruction"}] * 5)
+
+    trainset = [
+        Example(input="What is the color of the sky?", output="blue").with_inputs("input"),
+        Example(input="What does the fox say?", output="Ring-ding-ding-ding-dingeringeding!").with_inputs("input"),
+    ]
+
+    with dspy.context(lm=task_lm):
+        optimizer = dspy.GEPA(
+            metric=async_metric,
+            reflection_lm=reflection_lm,
+            max_metric_calls=5,
+        )
+        optimized_program = optimizer.compile(student, trainset=trainset, valset=trainset)
+
+    assert optimized_program is not None
