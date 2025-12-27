@@ -211,12 +211,122 @@ def get_annotation_name(annotation):
         return f"{get_annotation_name(origin)}[{args_str}]"
 
 
+def is_pydantic_model(annotation: Any) -> bool:
+    """Check if a type annotation is or contains a Pydantic BaseModel.
+
+    Handles:
+    - Direct BaseModel subclasses
+    - Union types containing BaseModel (including Optional)
+    - Generic types like List[Model], Dict[str, Model]
+
+    Args:
+        annotation: Type annotation to check
+
+    Returns:
+        True if annotation is or contains a Pydantic BaseModel
+    """
+    try:
+        from pydantic import BaseModel
+
+        # Direct check
+        if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
+            return True
+
+        # Handle Union/Optional types
+        origin = get_origin(annotation)
+        if origin is Union or (hasattr(types, 'UnionType') and origin is types.UnionType):
+            args = get_args(annotation)
+            return any(is_pydantic_model(arg) for arg in args if arg is not type(None))
+
+        # Handle generic types (List[Model], Dict[str, Model], etc.)
+        if origin is not None:
+            args = get_args(annotation)
+            return any(is_pydantic_model(arg) for arg in args)
+
+    except (TypeError, ImportError):
+        pass
+
+    return False
+
+
+def extract_pydantic_field_descriptions(
+    model_class: type,
+    max_depth: int = 3,
+    _visited: set | None = None,
+    _indent_level: int = 1,
+) -> str:
+    """Extract field descriptions from a Pydantic model recursively.
+
+    Args:
+        model_class: Pydantic BaseModel class
+        max_depth: Maximum recursion depth
+        _visited: Internal use - tracks visited models
+        _indent_level: Internal use - current indentation level
+
+    Returns:
+        Formatted string with field descriptions
+    """
+    from pydantic import BaseModel
+
+    if _visited is None:
+        _visited = set()
+
+    if max_depth <= 0 or model_class in _visited:
+        return ""
+
+    _visited = _visited | {model_class}
+    indent = "    " * _indent_level
+    lines = []
+
+    for field_name, field_info in model_class.model_fields.items():
+        field_type = get_annotation_name(field_info.annotation)
+        line = f"{indent}- {field_name} ({field_type})"
+
+        if field_info.description:
+            line += f": {field_info.description}"
+
+        lines.append(line)
+
+        if is_pydantic_model(field_info.annotation):
+            for nested_model in _extract_models_from_annotation(field_info.annotation):
+                nested = extract_pydantic_field_descriptions(
+                    nested_model, max_depth - 1, _visited, _indent_level + 1
+                )
+                if nested:
+                    lines.append(nested)
+
+    return "\n".join(lines)
+
+
+def _extract_models_from_annotation(annotation: Any) -> list[type]:
+    """Extract Pydantic model classes from a type annotation."""
+    from pydantic import BaseModel
+
+    if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
+        return [annotation]
+
+    models = []
+    origin = get_origin(annotation)
+    if origin is not None:
+        for arg in get_args(annotation):
+            if arg is not type(None):
+                models.extend(_extract_models_from_annotation(arg))
+
+    return models
+
+
 def get_field_description_string(fields: dict) -> str:
     field_descriptions = []
     for idx, (k, v) in enumerate(fields.items()):
         field_message = f"{idx + 1}. `{k}`"
         field_message += f" ({get_annotation_name(v.annotation)})"
         desc = v.json_schema_extra["desc"] if v.json_schema_extra["desc"] != f"${{{k}}}" else ""
+
+        if is_pydantic_model(v.annotation):
+            for model_class in _extract_models_from_annotation(v.annotation):
+                nested_desc = extract_pydantic_field_descriptions(model_class, max_depth=3)
+                if nested_desc:
+                    desc += f"\n    Fields:\n{nested_desc}"
 
         custom_types = DspyType.extract_custom_type_from_annotation(v.annotation)
         for custom_type in custom_types:
