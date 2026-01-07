@@ -173,14 +173,18 @@ def test_json_adapter_on_pydantic_model():
         assert content is not None
 
         # Assert that system prompt includes correct input field descriptions
-        expected_input_fields = (
-            "1. `user` (User): The user who asks the question\n2. `question` (str): Question the user asks\n"
-        )
-        assert expected_input_fields in content
+        assert "1. `user` (User): The user who asks the question" in content
+        assert "2. `question` (str): Question the user asks" in content
+        # Assert nested User fields are included
+        assert "- id (int)" in content
+        assert "- name (str)" in content
+        assert "- email (str)" in content
 
         # Assert that system prompt includes correct output field description
-        expected_output_fields = "1. `answer` (Answer): Answer to this question\n"
-        assert expected_output_fields in content
+        assert "1. `answer` (Answer): Answer to this question" in content
+        # Assert nested Answer fields are included
+        assert "- analysis (str)" in content
+        assert "- result (str)" in content
 
         # Assert that system prompt includes input formatting structure
         expected_input_structure = "[[ ## user ## ]]\n{user}\n\n[[ ## question ## ]]\n{question}\n\n"
@@ -584,14 +588,18 @@ async def test_json_adapter_on_pydantic_model_async():
         assert content is not None
 
         # Assert that system prompt includes correct input field descriptions
-        expected_input_fields = (
-            "1. `user` (User): The user who asks the question\n2. `question` (str): Question the user asks\n"
-        )
-        assert expected_input_fields in content
+        assert "1. `user` (User): The user who asks the question" in content
+        assert "2. `question` (str): Question the user asks" in content
+        # Assert nested User fields are included
+        assert "- id (int)" in content
+        assert "- name (str)" in content
+        assert "- email (str)" in content
 
         # Assert that system prompt includes correct output field description
-        expected_output_fields = "1. `answer` (Answer): Answer to this question\n"
-        assert expected_output_fields in content
+        assert "1. `answer` (Answer): Answer to this question" in content
+        # Assert nested Answer fields are included
+        assert "- analysis (str)" in content
+        assert "- result (str)" in content
 
         # Assert that system prompt includes input formatting structure
         expected_input_structure = "[[ ## user ## ]]\n{user}\n\n[[ ## question ## ]]\n{question}\n\n"
