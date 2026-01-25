@@ -1,3 +1,4 @@
+import inspect
 import logging
 from dataclasses import dataclass
 from types import MethodType
@@ -54,7 +55,12 @@ def bootstrap_trace_data(
         prediction, _ = prediction
         if isinstance(prediction, FailedPrediction):
             return prediction.format_reward or format_failure_score
-        return metric(example, prediction, trace) if metric else True
+        if not metric:
+            return True
+        if inspect.iscoroutinefunction(metric):
+            from dspy.utils.syncify import run_async
+            return run_async(metric(example, prediction, trace))
+        return metric(example, prediction, trace)
 
     # Use `object.__getattribute__` to bypass the custom hook `Module.__getattribute__` so that we avoid
     # the warning that `forward` is not accessed through `__call__`.
