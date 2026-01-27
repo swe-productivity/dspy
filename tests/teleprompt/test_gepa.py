@@ -4,6 +4,7 @@ from typing import Any
 from unittest import mock
 
 import pytest
+import logging
 
 import dspy
 import dspy.clients
@@ -521,3 +522,33 @@ def test_alternating_half_component_selector():
             # Odd iteration should select second half: ["generator"]
             assert "generator" in selection["selected"], f"Odd iteration {selection['iteration']} should include generator"
             assert "classifier" not in selection["selected"], f"Odd iteration {selection['iteration']} should not include classifier"
+
+def no_feeback_metric(example, prediction, trace=None, pred_name=None, pred_trace=None):
+    return dspy.Prediction(score=example.output == prediction.output)
+
+def test_feedback_warning(caplog):
+    student = SimpleModule("input -> output")
+
+    with open("tests/teleprompt/gepa_dummy_lm.json") as f:
+        data = json.load(f)
+    lm_history = data["lm"]
+    reflection_lm_history = data["reflection_lm"]
+
+    lm_main = DictDummyLM(lm_history)
+    dspy.configure(lm=lm_main)
+    reflection_lm = DictDummyLM(reflection_lm_history)
+
+    optimizer = dspy.GEPA(
+        metric=no_feeback_metric,
+        reflection_lm=reflection_lm,
+        max_metric_calls=5,
+        use_mlflow=False
+    )
+    trainset = [
+        Example(input="What is the color of the sky?", output="blue").with_inputs("input"),
+        Example(input="What does the fox say?", output="Ring-ding-ding-ding-dingeringeding!").with_inputs("input"),
+    ]
+    optimized_program = optimizer.compile(student, trainset=trainset, valset=trainset)
+
+    print(caplog.messages)
+    assert "Metric functions without sensible feedbacks" in caplog

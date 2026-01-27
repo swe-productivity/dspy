@@ -170,6 +170,9 @@ class Evaluate:
         def process_item(example):
             prediction = program(**example.inputs())
             score = metric(example, prediction)
+            score_attr = getattr(score, "_store")
+            if not "feedback" in  score_attr or type(score_attr["feedback"]) != str:
+                logger.warning("Metric functions without sensible feedbacks of type string will result in no learning at all")
             return prediction, score
 
         results = executor.execute(process_item, devset)
