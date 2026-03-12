@@ -35,7 +35,6 @@ def test_command_with_spaces_in_path(mock_wait, mock_port, mock_popen, mock_thre
         model_index = command.index("--model-path")
         assert command[model_index + 1] == "/path/to/my models/llama"
         
-        # Check for extra args
         assert "--cuda-graph-max-bs" in command
         bs_index = command.index("--cuda-graph-max-bs")
         assert command[bs_index + 1] == "96"
@@ -143,3 +142,4 @@ def test_launch_with_extra_args(mock_wait, mock_port, mock_popen, mock_thread):
         assert command[bs_index + 1] == "96"
         
         assert "--disable-cuda-graph" in command
+    
