@@ -12,7 +12,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class PromptCompressor:
-    "PromptCompressor class for compressing prompts locally while preserving key information."
+    "PromptCompressor class for compressing prompts locally using LLMlingua while preserving key information."
 
     def __init__(self, 
         model_name: str,
@@ -22,6 +22,9 @@ class PromptCompressor:
         device : Optional[str] = "cuda" if torch.cuda.is_available() else "cpu", 
         cache: bool = True,
         ) -> None:
+
+        if ExternalCompressor is None:
+            raise ImportError("llmlingua is not installed. Please install it with `pip install llmlingua`.")
 
         self.model_name = model_name
         self.dynamic_context_compression_ratio = dynamic_context_compression_ratio
@@ -33,6 +36,7 @@ class PromptCompressor:
 
         self._compressor = ExternalCompressor(
             model_name=self.model_name,
+            use_llmlingua2=self.is_v2,
             device_map=self.device
         )
 
