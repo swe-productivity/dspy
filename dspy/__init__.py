@@ -18,6 +18,7 @@ from dspy.dsp.utils.settings import settings
 from dspy.dsp.colbertv2 import ColBERTv2
 from dspy.clients import DSPY_CACHE
 from dspy.__metadata__ import __name__, __version__, __description__, __url__, __author__, __author_email__
+from dspy.primitives.compressor import PromptCompressor
 
 configure_dspy_loggers(__name__)
 
