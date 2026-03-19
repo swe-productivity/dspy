@@ -19,7 +19,7 @@ def test_command_with_spaces_in_path(mock_wait, mock_port, mock_popen, mock_thre
     lm = mock.Mock(spec=[])
     lm.model = "/path/to/my models/llama"
     lm.launch_kwargs = {
-        "extra_args": "--cuda-graph-max-bs 96 --disable-cuda-graph"
+        "extra_args": ["--cuda-graph-max-bs", "96", "--disable-cuda-graph"]
     }
     lm.kwargs = {}
 
@@ -120,26 +120,26 @@ def test_launch_with_extra_args(mock_wait, mock_port, mock_popen, mock_thread):
     lm = mock.Mock(spec=[])
     lm.model = "meta-llama/Llama-2-7b"
     lm.launch_kwargs = {
-        "extra_args": "--cuda-graph-max-bs 96 --disable-cuda-graph"
+        "extra_args": ["--cuda-graph-max-bs", "96", "--disable-cuda-graph"]
     }
     lm.kwargs = {}
 
     with mock.patch.dict("sys.modules", {"sglang": mock.Mock(), "sglang.utils": mock.Mock()}):
         LocalProvider.launch(lm)
 
-        assert mock_popen.called
-        call_args = mock_popen.call_args
-        command = call_args[0][0]
+    assert mock_popen.called
+    call_args = mock_popen.call_args
+    command = call_args[0][0]
 
-        assert isinstance(command, list)
-        assert "--model-path" in command
-        model_index = command.index("--model-path")
-        assert command[model_index + 1] == "meta-llama/Llama-2-7b"
-        
-        # Check for extra args
-        assert "--cuda-graph-max-bs" in command
-        bs_index = command.index("--cuda-graph-max-bs")
-        assert command[bs_index + 1] == "96"
-        
-        assert "--disable-cuda-graph" in command
+    assert isinstance(command, list)
+    assert "--model-path" in command
+    model_index = command.index("--model-path")
+    assert command[model_index + 1] == "meta-llama/Llama-2-7b"
+    
+    # Check for extra args
+    assert "--cuda-graph-max-bs" in command
+    bs_index = command.index("--cuda-graph-max-bs")
+    assert command[bs_index + 1] == "96"
+    
+    assert "--disable-cuda-graph" in command
     
