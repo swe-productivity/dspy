@@ -600,7 +600,7 @@ class GEPA(Teleprompter):
         )
 
         rng = random.Random(self.seed)
-
+                
         def feedback_fn_creator(pred_name: str, predictor) -> "PredictorFeedbackFn":
             def feedback_fn(
                 predictor_output: dict[str, Any],
@@ -617,6 +617,7 @@ class GEPA(Teleprompter):
                     pred_name,
                     trace_for_pred,
                 )
+
                 if hasattr(o, "feedback"):
                     if o["feedback"] is None:
                         o["feedback"] = f"This trajectory got a score of {o['score']}."
