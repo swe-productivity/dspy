@@ -2,9 +2,14 @@
 DSPy Teleprompter wrapper for Pydantic field GEPA optimization.
 
 Provides a DSPy-compatible interface for the PydanticFieldGEPAAdapter.
+
+.. deprecated::
+    Use :class:`dspy.GEPA` with the ``pydantic_model`` parameter instead.
 """
 
+import warnings
 from typing import Any, Callable
+
 from pydantic import BaseModel
 
 import dspy
@@ -51,6 +56,10 @@ class PydanticFieldGEPA:
     ):
         """Initialize the optimizer.
 
+        .. deprecated::
+            Use :class:`dspy.GEPA` with the ``pydantic_model`` parameter instead.
+            Example: ``GEPA(metric=metric, pydantic_model=MyModel, evolvable_fields='all', ...)``
+
         Args:
             pydantic_model: The Pydantic model defining extraction schema
             metric: Optional overall metric function
@@ -65,6 +74,12 @@ class PydanticFieldGEPA:
             reflection_lm: LM for reflection/proposals
             verbose: Whether to print progress
         """
+        warnings.warn(
+            "PydanticFieldGEPA is deprecated. Use GEPA with pydantic_model parameter instead. "
+            "Example: GEPA(metric=metric, pydantic_model=MyModel, evolvable_fields='all', ...)",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.pydantic_model = pydantic_model
         self.metric = metric
         self.evolvable_fields = evolvable_fields

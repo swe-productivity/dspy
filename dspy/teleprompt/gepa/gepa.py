@@ -3,7 +3,11 @@ import json
 import logging
 import random
 from dataclasses import dataclass
-from typing import Any, Literal, Optional, Protocol, Union
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Protocol, Union
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
+    from dspy.teleprompt.gepa.pydantic_field.types import FieldScorerFn
 
 from gepa import GEPAResult
 from gepa.core.adapter import ProposalFn
@@ -377,14 +381,33 @@ class GEPA(Teleprompter):
         seed: int | None = 0,
         # GEPA passthrough kwargs
         gepa_kwargs: dict | None = None,
+        # Pydantic field optimization mode
+        pydantic_model: "type[BaseModel] | None" = None,
+        evolvable_fields: "list[str] | str | None" = None,
+        field_scorers: "dict[str, FieldScorerFn] | None" = None,
+        field_weights: "dict[str, float] | None" = None,
+        input_field_name: str = "document",
+        output_field_name: str = "extracted_data",
+        base_instruction: str = "Extract data from the document.",
     ):
-        try:
-            inspect.signature(metric).bind(None, None, None, None, None)
-        except TypeError as e:
-            raise TypeError(
-                "GEPA metric must accept five arguments: (gold, pred, trace, pred_name, pred_trace). "
-                "See https://dspy.ai/api/optimizers/GEPA for details."
-            ) from e
+        # Store pydantic mode parameters first (needed for conditional validation)
+        self.pydantic_model = pydantic_model
+        self.evolvable_fields = evolvable_fields
+        self.field_scorers = field_scorers
+        self.field_weights = field_weights
+        self.input_field_name = input_field_name
+        self.output_field_name = output_field_name
+        self.base_instruction = base_instruction
+
+        # Metric signature validation (skip in pydantic mode which allows simpler metrics)
+        if not self._is_pydantic_mode:
+            try:
+                inspect.signature(metric).bind(None, None, None, None, None)
+            except TypeError as e:
+                raise TypeError(
+                    "GEPA metric must accept five arguments: (gold, pred, trace, pred_name, pred_trace). "
+                    "See https://dspy.ai/api/optimizers/GEPA for details."
+                ) from e
 
         self.metric_fn = metric
 
@@ -442,6 +465,11 @@ class GEPA(Teleprompter):
         self.custom_instruction_proposer = instruction_proposer
         self.component_selector = component_selector
         self.gepa_kwargs = gepa_kwargs or {}
+
+    @property
+    def _is_pydantic_mode(self) -> bool:
+        """Check if GEPA is in pydantic field evolution mode."""
+        return self.pydantic_model is not None
 
     def _build_seed_candidate(self, student: Module) -> dict[str, str]:
         """
@@ -601,51 +629,80 @@ class GEPA(Teleprompter):
 
         rng = random.Random(self.seed)
 
-        def feedback_fn_creator(pred_name: str, predictor) -> "PredictorFeedbackFn":
-            def feedback_fn(
-                predictor_output: dict[str, Any],
-                predictor_inputs: dict[str, Any],
-                module_inputs: Example,
-                module_outputs: Prediction,
-                captured_trace: "DSPyTrace",
-            ) -> "ScoreWithFeedback":
-                trace_for_pred = [(predictor, predictor_inputs, predictor_output)]
-                o = self.metric_fn(
-                    module_inputs,
-                    module_outputs,
-                    captured_trace,
-                    pred_name,
-                    trace_for_pred,
+        # Conditional adapter creation based on mode
+        if self._is_pydantic_mode:
+            # Pydantic field evolution mode
+            if self.enable_tool_optimization:
+                logger.warning(
+                    "enable_tool_optimization is ignored in pydantic mode. "
+                    "Pydantic mode optimizes field descriptions, not tool descriptions."
                 )
-                if hasattr(o, "feedback"):
-                    if o["feedback"] is None:
-                        o["feedback"] = f"This trajectory got a score of {o['score']}."
-                    return o
-                else:
-                    return dict(score=o, feedback=f"This trajectory got a score of {o}.")
 
-            return feedback_fn
+            from dspy.teleprompt.gepa.pydantic_field.adapter import PydanticFieldGEPAAdapter
 
-        feedback_map = {k: feedback_fn_creator(k, v) for k, v in student.named_predictors()}
+            adapter = PydanticFieldGEPAAdapter(
+                pydantic_model=self.pydantic_model,
+                extractor_module=student,
+                metric_fn=self.metric_fn,
+                evolvable_fields=self.evolvable_fields,
+                field_scorers=self.field_scorers,
+                field_weights=self.field_weights,
+                input_field_name=self.input_field_name,
+                output_field_name=self.output_field_name,
+                num_threads=self.num_threads,
+                failure_score=self.failure_score,
+                reflection_lm=self.reflection_lm,
+            )
 
-        # Build the DSPy adapter that encapsulates evaluation, trace capture, feedback extraction, and instruction proposal
-        adapter = DspyAdapter(
-            student_module=student,
-            metric_fn=self.metric_fn,
-            feedback_map=feedback_map,
-            failure_score=self.failure_score,
-            num_threads=self.num_threads,
-            add_format_failure_as_feedback=self.add_format_failure_as_feedback,
-            rng=rng,
-            reflection_lm=self.reflection_lm,
-            custom_instruction_proposer=self.custom_instruction_proposer,
-            warn_on_score_mismatch=self.warn_on_score_mismatch,
-            enable_tool_optimization=self.enable_tool_optimization,
-            reflection_minibatch_size=self.reflection_minibatch_size,
-        )
+            # Build seed candidate using pydantic-specific builder
+            seed_candidate = adapter.build_seed_candidate(self.base_instruction)
+        else:
+            # Standard DSPy predictor instruction evolution mode
+            def feedback_fn_creator(pred_name: str, predictor) -> "PredictorFeedbackFn":
+                def feedback_fn(
+                    predictor_output: dict[str, Any],
+                    predictor_inputs: dict[str, Any],
+                    module_inputs: Example,
+                    module_outputs: Prediction,
+                    captured_trace: "DSPyTrace",
+                ) -> "ScoreWithFeedback":
+                    trace_for_pred = [(predictor, predictor_inputs, predictor_output)]
+                    o = self.metric_fn(
+                        module_inputs,
+                        module_outputs,
+                        captured_trace,
+                        pred_name,
+                        trace_for_pred,
+                    )
+                    if hasattr(o, "feedback"):
+                        if o["feedback"] is None:
+                            o["feedback"] = f"This trajectory got a score of {o['score']}."
+                        return o
+                    else:
+                        return dict(score=o, feedback=f"This trajectory got a score of {o}.")
 
-        # Build the seed candidate configuration
-        seed_candidate = self._build_seed_candidate(student)
+                return feedback_fn
+
+            feedback_map = {k: feedback_fn_creator(k, v) for k, v in student.named_predictors()}
+
+            # Build the DSPy adapter that encapsulates evaluation, trace capture, feedback extraction, and instruction proposal
+            adapter = DspyAdapter(
+                student_module=student,
+                metric_fn=self.metric_fn,
+                feedback_map=feedback_map,
+                failure_score=self.failure_score,
+                num_threads=self.num_threads,
+                add_format_failure_as_feedback=self.add_format_failure_as_feedback,
+                rng=rng,
+                reflection_lm=self.reflection_lm,
+                custom_instruction_proposer=self.custom_instruction_proposer,
+                warn_on_score_mismatch=self.warn_on_score_mismatch,
+                enable_tool_optimization=self.enable_tool_optimization,
+                reflection_minibatch_size=self.reflection_minibatch_size,
+            )
+
+            # Build the seed candidate configuration
+            seed_candidate = self._build_seed_candidate(student)
 
         gepa_result: GEPAResult = optimize(
             seed_candidate=seed_candidate,

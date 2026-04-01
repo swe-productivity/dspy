@@ -384,3 +384,32 @@ class PydanticFieldGEPAAdapter:
             reflective_dataset=reflective_dataset,
             components_to_update=components_to_update,
         )
+
+    def stripped_lm_call(self, x: str) -> list[str]:
+        """Wrap LM call to always return strings.
+
+        Extracts text from dict outputs if needed (e.g., when LM returns
+        {"text": "...", "reasoning": "..."}).
+
+        Args:
+            x: Input prompt string
+
+        Returns:
+            List of string outputs from the LM
+        """
+        if self.reflection_lm is None:
+            raise ValueError("reflection_lm is required for stripped_lm_call")
+
+        raw_outputs = self.reflection_lm(x)
+        outputs = []
+        for raw_output in raw_outputs:
+            if isinstance(raw_output, str):
+                outputs.append(raw_output)
+            elif isinstance(raw_output, dict):
+                if "text" not in raw_output:
+                    raise KeyError("Missing 'text' field in the output from the LM!")
+                outputs.append(raw_output["text"])
+            else:
+                raise TypeError(f"Unexpected output type from LM: {type(raw_output)}")
+
+        return outputs
