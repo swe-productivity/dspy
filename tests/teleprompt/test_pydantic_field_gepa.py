@@ -1,5 +1,5 @@
 """
-Unit tests for PydanticFieldGEPA adapter.
+Unit tests for GEPA pydantic field evolution mode.
 
 Tests the essential components:
 - CandidateBuilder: Building candidates from Pydantic models
@@ -18,7 +18,6 @@ from dspy.teleprompt.gepa.pydantic_field import (
     SignatureFactory,
     FieldEvaluator,
     PydanticFieldGEPAAdapter,
-    PydanticFieldGEPA,
 )
 from dspy.teleprompt.gepa.pydantic_field.types import (
     FieldEvaluationResult,
@@ -393,6 +392,46 @@ class TestPydanticFieldGEPAAdapterIntegration:
         # Should have examples for field:email (which had errors)
         assert "field:email" in dataset
         assert len(dataset["field:email"]) == 1
+
+
+class TestGEPAPydanticMode:
+    """Tests for GEPA with pydantic_model parameter."""
+
+    def test_gepa_pydantic_mode_instantiation(self):
+        """GEPA should accept pydantic_model parameter."""
+        class MockLM:
+            def __call__(self, x):
+                return "test"
+
+        gepa = dspy.GEPA(
+            metric=lambda gold, pred: 1.0,
+            pydantic_model=SimpleContact,
+            evolvable_fields="all",
+            reflection_lm=MockLM(),
+            max_metric_calls=10,
+        )
+
+        assert gepa._is_pydantic_mode is True
+        assert gepa.pydantic_model is SimpleContact
+        assert gepa.evolvable_fields == "all"
+
+    def test_gepa_standard_mode(self):
+        """GEPA without pydantic_model should be in standard mode."""
+        class MockLM:
+            def __call__(self, x):
+                return "test"
+
+        def metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
+            return 1.0
+
+        gepa = dspy.GEPA(
+            metric=metric,
+            reflection_lm=MockLM(),
+            max_metric_calls=10,
+        )
+
+        assert gepa._is_pydantic_mode is False
+        assert gepa.pydantic_model is None
 
 
 if __name__ == "__main__":
