@@ -3,13 +3,10 @@ Type definitions for the Pydantic Field GEPA Adapter.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Sequence, TypeAlias
+from typing import Any, Callable
 
 # Type alias for candidate dictionary
 Candidate = dict[str, str]
-
-# Type alias for trajectory data
-Trajectory = dict[str, Any]
 
 
 def make_reflective_example(
@@ -65,6 +62,3 @@ class FieldTrajectory:
 # Type alias for field scorer function
 # Takes (gold_value, predicted_value, field_name) and returns (score, feedback)
 FieldScorerFn = Callable[[Any, Any, str], tuple[float, str]]
-
-# Type alias for reflective dataset
-ReflectiveDataset = Mapping[str, Sequence[dict[str, Any]]]
