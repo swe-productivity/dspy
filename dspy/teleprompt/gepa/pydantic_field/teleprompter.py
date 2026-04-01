@@ -9,8 +9,8 @@ from pydantic import BaseModel
 
 import dspy
 
-from .types import FieldScorerFn
-from .adapter import PydanticFieldGEPAAdapter
+from dspy.teleprompt.gepa.pydantic_field.types import FieldScorerFn
+from dspy.teleprompt.gepa.pydantic_field.adapter import PydanticFieldGEPAAdapter
 
 
 class PydanticFieldGEPA:
@@ -116,31 +116,17 @@ class PydanticFieldGEPA:
             for key, value in seed_candidate.items():
                 print(f"  {key}: {value[:50]}..." if len(value) > 50 else f"  {key}: {value}")
 
-        # Try to use GEPA library's optimize function
-        try:
-            from gepa import optimize
+        from gepa import optimize
 
-            result = optimize(
-                seed_candidate=seed_candidate,
-                trainset=trainset,
-                valset=valset or trainset,
-                adapter=adapter,
-                max_metric_calls=self.max_metric_calls,
-            )
+        result = optimize(
+            seed_candidate=seed_candidate,
+            trainset=trainset,
+            valset=valset or trainset,
+            adapter=adapter,
+            max_metric_calls=self.max_metric_calls,
+        )
 
-            best_candidate = result.best_candidate
-
-        except ImportError:
-            # Fallback: simple evolution loop without full GEPA
-            if self.verbose:
-                print("GEPA library not installed, using simplified evolution")
-
-            best_candidate = self._simple_evolution(
-                adapter=adapter,
-                seed_candidate=seed_candidate,
-                trainset=trainset,
-                valset=valset or trainset,
-            )
+        best_candidate = result.best_candidate
 
         if self.verbose:
             print(f"\nFinal candidate:")
@@ -149,104 +135,3 @@ class PydanticFieldGEPA:
 
         # Build optimized program
         return adapter.build_program(best_candidate)
-
-    def _simple_evolution(
-        self,
-        adapter: PydanticFieldGEPAAdapter,
-        seed_candidate: dict[str, str],
-        trainset: list[Any],
-        valset: list[Any],
-        max_iterations: int = 10,
-    ) -> dict[str, str]:
-        """Simple evolution loop when GEPA library is not available.
-
-        This is a fallback that performs basic iterative improvement.
-
-        Args:
-            adapter: The GEPA adapter
-            seed_candidate: Initial candidate
-            trainset: Training data
-            valset: Validation data
-            max_iterations: Maximum improvement iterations
-
-        Returns:
-            Best candidate found
-        """
-        best_candidate = seed_candidate.copy()
-
-        # Evaluate initial candidate
-        eval_batch = adapter.evaluate(valset, best_candidate, capture_traces=True)
-        best_score = sum(eval_batch.scores) / len(eval_batch.scores) if eval_batch.scores else 0.0
-
-        if self.verbose:
-            print(f"Initial score: {best_score:.4f}")
-
-        for iteration in range(max_iterations):
-            # Find components with errors
-            components_to_update = []
-            for key in best_candidate.keys():
-                if key == "seed_prompt":
-                    if best_score < 0.95:
-                        components_to_update.append(key)
-                elif key.startswith("field:"):
-                    # Check if this field had errors
-                    field_name = key.replace("field:", "")
-                    if eval_batch.trajectories:
-                        for traj in eval_batch.trajectories:
-                            if hasattr(traj, "field_scores") and traj.field_scores.get(field_name, 1.0) < 1.0:
-                                components_to_update.append(key)
-                                break
-
-            if not components_to_update:
-                if self.verbose:
-                    print(f"No components to update at iteration {iteration + 1}")
-                break
-
-            # Build reflective dataset
-            reflective_dataset = adapter.make_reflective_dataset(
-                best_candidate,
-                eval_batch,
-                components_to_update,
-            )
-
-            if not reflective_dataset:
-                break
-
-            # Propose new texts
-            try:
-                proposed = adapter.propose_new_texts(
-                    best_candidate,
-                    reflective_dataset,
-                    components_to_update,
-                )
-            except Exception as e:
-                if self.verbose:
-                    print(f"Proposal failed: {e}")
-                break
-
-            if not proposed:
-                break
-
-            # Create new candidate
-            new_candidate = best_candidate.copy()
-            new_candidate.update(proposed)
-
-            # Evaluate new candidate
-            new_eval_batch = adapter.evaluate(valset, new_candidate, capture_traces=True)
-            new_score = sum(new_eval_batch.scores) / len(new_eval_batch.scores) if new_eval_batch.scores else 0.0
-
-            if self.verbose:
-                print(f"Iteration {iteration + 1}: score {new_score:.4f} (was {best_score:.4f})")
-
-            # Accept if improved
-            if new_score > best_score:
-                best_candidate = new_candidate
-                best_score = new_score
-                eval_batch = new_eval_batch
-
-                if best_score >= 0.99:
-                    if self.verbose:
-                        print("Reached near-perfect score, stopping early")
-                    break
-
-        return best_candidate

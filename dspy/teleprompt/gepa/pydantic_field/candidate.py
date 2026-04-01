@@ -8,7 +8,7 @@ field descriptions and structuring them for GEPA evolution.
 from typing import get_args, get_origin
 from pydantic import BaseModel
 
-from .types import Candidate
+from dspy.teleprompt.gepa.pydantic_field.types import Candidate
 
 
 class CandidateBuilder:

@@ -11,7 +11,7 @@ from typing import Any, Mapping, Sequence, TYPE_CHECKING
 if TYPE_CHECKING:
     import dspy
 
-from .types import Candidate
+from dspy.teleprompt.gepa.pydantic_field.types import Candidate
 
 
 import dspy
@@ -41,21 +41,6 @@ class FieldDescriptionProposalSignature(dspy.Signature):
     )
 
 
-class InstructionProposalSignature(dspy.Signature):
-    """Improve the main extraction instruction.
-
-    The instruction guides the overall extraction process. Based on the failures
-    observed, propose an improved instruction that will lead to better extractions.
-    """
-
-    current_instruction: str = dspy.InputField(desc="Current extraction instruction")
-    extraction_failures: str = dspy.InputField(desc="Summary of extraction failures across fields")
-
-    improved_instruction: str = dspy.OutputField(
-        desc="Improved extraction instruction that addresses common failure patterns"
-    )
-
-
 class FieldDescriptionProposer:
     """GEPA-compatible proposer for field descriptions.
 
@@ -71,7 +56,6 @@ class FieldDescriptionProposer:
         """
         self.reflection_lm = reflection_lm
         self.field_proposer = dspy.Predict(FieldDescriptionProposalSignature)
-        self.instruction_proposer = dspy.Predict(InstructionProposalSignature)
 
     def __call__(
         self,
@@ -157,9 +141,6 @@ class FieldDescriptionProposer:
     ) -> str:
         """Propose improved extraction instruction.
 
-        Uses GEPA's InstructionProposalSignature if available,
-        otherwise falls back to custom proposer.
-
         Args:
             current_instruction: Current instruction text
             examples: List of failure examples
@@ -167,30 +148,16 @@ class FieldDescriptionProposer:
         Returns:
             Improved instruction string
         """
-        # Try to use GEPA's proven instruction proposer
-        try:
-            from gepa.strategies.instruction_proposal import InstructionProposalSignature as GEPAProposal
+        from gepa.strategies.instruction_proposal import InstructionProposalSignature as GEPAProposal
 
-            result = GEPAProposal.run(
-                lm=lambda x: [dspy.settings.lm(x)[0]],
-                input_dict={
-                    "current_instruction_doc": current_instruction,
-                    "dataset_with_feedback": list(examples),
-                },
-            )
-            return result["new_instruction"]
-        except ImportError:
-            pass
-
-        # Fallback to custom proposer
-        failures_text = self._format_instruction_failures(examples)
-
-        result = self.instruction_proposer(
-            current_instruction=current_instruction,
-            extraction_failures=failures_text,
+        result = GEPAProposal.run(
+            lm=lambda x: [dspy.settings.lm(x)[0]],
+            input_dict={
+                "current_instruction_doc": current_instruction,
+                "dataset_with_feedback": list(examples),
+            },
         )
-
-        return result.improved_instruction
+        return result["new_instruction"]
 
     def _format_field_failures(
         self,
@@ -231,27 +198,5 @@ class FieldDescriptionProposer:
             # Feedback
             formatted.append(f"  Feedback: {feedback}")
             formatted.append("")
-
-        return "\n".join(formatted)
-
-    def _format_instruction_failures(
-        self,
-        examples: Sequence[Mapping[str, Any]],
-        max_examples: int = 5,
-    ) -> str:
-        """Format instruction-level failures for the proposer.
-
-        Args:
-            examples: List of failure examples
-            max_examples: Maximum number of examples to include
-
-        Returns:
-            Formatted string of failures
-        """
-        formatted = ["Summary of extraction failures:"]
-
-        for i, ex in enumerate(examples[:max_examples]):
-            feedback = ex.get("Feedback", "Extraction failed")
-            formatted.append(f"  {i + 1}. {feedback}")
 
         return "\n".join(formatted)

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 import dspy
 from dspy import Signature
 
-from .types import Candidate
+from dspy.teleprompt.gepa.pydantic_field.types import Candidate
 
 
 class SignatureFactory:

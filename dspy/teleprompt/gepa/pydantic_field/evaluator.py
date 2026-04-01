@@ -8,7 +8,7 @@ support for custom scorers and weighted aggregation.
 from typing import Any, Callable
 from pydantic import BaseModel
 
-from .types import FieldEvaluationResult, FieldScorerFn
+from dspy.teleprompt.gepa.pydantic_field.types import FieldEvaluationResult, FieldScorerFn
 
 
 class FieldEvaluator:

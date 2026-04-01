@@ -11,35 +11,18 @@ from copy import deepcopy
 
 import dspy
 
-from .types import (
+from dspy.teleprompt.gepa.pydantic_field.types import (
     Candidate,
     FieldEvaluationResult,
     FieldTrajectory,
     FieldScorerFn,
     make_reflective_example,
 )
-from .candidate import CandidateBuilder
-from .signature_factory import SignatureFactory
-from .evaluator import FieldEvaluator, FeedbackGenerator
-from .proposer import FieldDescriptionProposer
-
-# Import GEPA types if available
-try:
-    from gepa import EvaluationBatch
-except ImportError:
-    # Define a minimal EvaluationBatch if gepa not installed
-    from dataclasses import dataclass
-    from typing import Generic, TypeVar
-
-    T = TypeVar("T")
-    R = TypeVar("R")
-
-    @dataclass
-    class EvaluationBatch(Generic[T, R]):
-        outputs: list[R]
-        scores: list[float]
-        trajectories: list[T] | None = None
-        objective_scores: list[dict[str, float]] | None = None
+from dspy.teleprompt.gepa.pydantic_field.candidate import CandidateBuilder
+from dspy.teleprompt.gepa.pydantic_field.signature_factory import SignatureFactory
+from dspy.teleprompt.gepa.pydantic_field.evaluator import FieldEvaluator, FeedbackGenerator
+from dspy.teleprompt.gepa.pydantic_field.proposer import FieldDescriptionProposer
+from gepa import EvaluationBatch
 
 
 class PydanticFieldGEPAAdapter:
