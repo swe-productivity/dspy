@@ -143,6 +143,7 @@ nav:
             - History: api/primitives/History.md
             - Image: api/primitives/Image.md
             - Prediction: api/primitives/Prediction.md
+            - PromptCompressor: api/primitives/PromptCompressor.md
             - Tool: api/primitives/Tool.md
             - ToolCalls: api/primitives/ToolCalls.md
         - Signatures:

@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG = dotdict(
     lm=None,
+    compressor=None,
     adapter=None,
     rm=None,
     branch_idx=0,

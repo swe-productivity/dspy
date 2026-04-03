@@ -187,6 +187,10 @@ class Predict(Module, Parameter):
 
     def forward(self, **kwargs):
         lm, config, signature, demos, kwargs = self._forward_preprocess(**kwargs)
+        compressor = config.get("compressor") or settings.compressor
+        comp_meta = None
+        if compressor is not None:
+            kwargs, comp_meta = compressor(signature, kwargs)
 
         adapter = settings.adapter or ChatAdapter()
 
@@ -197,10 +201,17 @@ class Predict(Module, Parameter):
             with settings.context(send_stream=None):
                 completions = adapter(lm, lm_kwargs=config, signature=signature, demos=demos, inputs=kwargs)
 
-        return self._forward_postprocess(completions, signature, **kwargs)
+        pred = self._forward_postprocess(completions, signature, **kwargs)
+        if comp_meta is not None:
+            pred.compression_metadata=comp_meta
+        return pred
 
     async def aforward(self, **kwargs):
         lm, config, signature, demos, kwargs = self._forward_preprocess(**kwargs)
+        compressor = config.get("compressor") or settings.compressor
+        comp_meta = None
+        if compressor is not None:
+            kwargs, comp_meta = compressor(signature, kwargs)
 
         adapter = settings.adapter or ChatAdapter()
         if self._should_stream():
@@ -210,7 +221,10 @@ class Predict(Module, Parameter):
             with settings.context(send_stream=None):
                 completions = await adapter.acall(lm, lm_kwargs=config, signature=signature, demos=demos, inputs=kwargs)
 
-        return self._forward_postprocess(completions, signature, **kwargs)
+        pred = self._forward_postprocess(completions, signature, **kwargs)
+        if comp_meta is not None:
+            pred.compression_metadata=comp_meta
+        return pred
 
     def update_config(self, **kwargs):
         self.config = {**self.config, **kwargs}
