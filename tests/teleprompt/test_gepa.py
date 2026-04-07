@@ -1,3 +1,4 @@
+import asyncio
 import json
 import threading
 from typing import Any
@@ -523,9 +524,14 @@ def test_alternating_half_component_selector():
             assert "classifier" not in selection["selected"], f"Odd iteration {selection['iteration']} should not include classifier"
 
 
-async def async_metric(example, prediction, trace=None, pred_name=None, pred_trace=None):
+async def async_metric(
+    example: dspy.Example,
+    prediction: dspy.Prediction,
+    trace: Any = None,
+    pred_name: str | None = None,
+    pred_trace: Any = None,
+) -> dspy.Prediction:
     """Async version of simple_metric for testing async support."""
-    import asyncio
     await asyncio.sleep(0.001)
     return dspy.Prediction(score=example.output == prediction.output, feedback="Async feedback")
 

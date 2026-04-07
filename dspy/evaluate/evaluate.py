@@ -6,6 +6,8 @@ import logging
 import types
 from typing import TYPE_CHECKING, Any, Callable
 
+from dspy.utils.syncify import run_async
+
 if TYPE_CHECKING:
     import pandas as pd
 
@@ -171,7 +173,6 @@ class Evaluate:
         def process_item(example):
             prediction = program(**example.inputs())
             if inspect.iscoroutinefunction(metric):
-                from dspy.utils.syncify import run_async
                 score = run_async(metric(example, prediction))
             else:
                 score = metric(example, prediction)

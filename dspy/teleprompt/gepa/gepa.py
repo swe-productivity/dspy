@@ -13,6 +13,7 @@ from dspy.primitives import Example, Module, Prediction
 from dspy.teleprompt.gepa.gepa_utils import DspyAdapter, DSPyTrace, PredictorFeedbackFn, ScoreWithFeedback
 from dspy.teleprompt.teleprompt import Teleprompter
 from dspy.utils.annotation import experimental
+from dspy.utils.syncify import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -515,7 +516,6 @@ class GEPA(Teleprompter):
             ) -> "ScoreWithFeedback":
                 trace_for_pred = [(predictor, predictor_inputs, predictor_output)]
                 if inspect.iscoroutinefunction(self.metric_fn):
-                    from dspy.utils.syncify import run_async
                     o = run_async(self.metric_fn(
                         module_inputs,
                         module_outputs,

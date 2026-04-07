@@ -10,6 +10,7 @@ from dspy.primitives.example import Example
 from dspy.primitives.module import Module
 from dspy.primitives.prediction import Prediction
 from dspy.utils.exceptions import AdapterParseError
+from dspy.utils.syncify import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,6 @@ def bootstrap_trace_data(
         if not metric:
             return True
         if inspect.iscoroutinefunction(metric):
-            from dspy.utils.syncify import run_async
             return run_async(metric(example, prediction, trace))
         return metric(example, prediction, trace)
 
