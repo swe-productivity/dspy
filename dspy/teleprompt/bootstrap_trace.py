@@ -1,3 +1,4 @@
+import inspect
 import logging
 from dataclasses import dataclass
 from types import MethodType
@@ -9,6 +10,7 @@ from dspy.primitives.example import Example
 from dspy.primitives.module import Module
 from dspy.primitives.prediction import Prediction
 from dspy.utils.exceptions import AdapterParseError
+from dspy.utils.syncify import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +56,11 @@ def bootstrap_trace_data(
         prediction, _ = prediction
         if isinstance(prediction, FailedPrediction):
             return prediction.format_reward or format_failure_score
-        return metric(example, prediction, trace) if metric else True
+        if not metric:
+            return True
+        if inspect.iscoroutinefunction(metric):
+            return run_async(metric(example, prediction, trace))
+        return metric(example, prediction, trace)
 
     # Use `object.__getattribute__` to bypass the custom hook `Module.__getattribute__` so that we avoid
     # the warning that `forward` is not accessed through `__call__`.

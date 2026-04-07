@@ -1,7 +1,12 @@
+import asyncio
+import csv
 import json
+import os
 import signal
 import tempfile
 import threading
+import time
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -12,6 +17,11 @@ from dspy.evaluate.metrics import answer_exact_match
 from dspy.predict import Predict
 from dspy.utils.callback import BaseCallback
 from dspy.utils.dummies import DummyLM
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 
 def new_example(question, answer):
@@ -58,7 +68,6 @@ def test_evaluate_call():
 
 @pytest.mark.extra
 def test_construct_result_df():
-    import pandas as pd
     devset = [
         new_example("What is 1+1?", "2"),
         new_example("What is 2+2?", "4"),
@@ -106,8 +115,6 @@ def test_multi_thread_evaluate_call_cancelled(monkeypatch):
     # slow LM that sleeps for 1 second before returning the answer
     class SlowLM(DummyLM):
         def __call__(self, *args, **kwargs):
-            import time
-
             time.sleep(1)
             return super().__call__(*args, **kwargs)
 
@@ -119,11 +126,7 @@ def test_multi_thread_evaluate_call_cancelled(monkeypatch):
 
     # spawn a thread that will sleep for .1 seconds then send a KeyboardInterrupt
     def sleep_then_interrupt():
-        import time
-
         time.sleep(0.1)
-        import os
-
         os.kill(os.getpid(), signal.SIGINT)
 
     input_thread = threading.Thread(target=sleep_then_interrupt)
@@ -335,7 +338,6 @@ def test_evaluate_save_as_json_with_history():
         assert data[1]["history"]["messages"][1] == {"question": "Previous Q3", "answer": "Previous A3"}
 
     finally:
-        import os
         if os.path.exists(temp_json):
             os.unlink(temp_json)
 
@@ -381,7 +383,6 @@ def test_evaluate_save_as_csv_with_history():
         assert result.score == 100.0
 
         # Verify CSV file was created
-        import csv
         with open(temp_csv) as f:
             reader = csv.DictReader(f)
             rows = list(reader)
@@ -392,7 +393,33 @@ def test_evaluate_save_as_csv_with_history():
         assert "messages" in rows[0]["history"]
 
     finally:
-        import os
         if os.path.exists(temp_csv):
             os.unlink(temp_csv)
+
+
+async def async_metric(example: dspy.Example, prediction: dspy.Prediction, trace: Any = None) -> bool:
+    """Async metric for testing."""
+    await asyncio.sleep(0.001)
+    return example.answer == prediction.answer
+
+
+def test_evaluate_with_async_metric():
+    """Test that Evaluate can work with async metrics."""
+    dspy.configure(
+        lm=DummyLM(
+            {
+                "What is 1+1?": {"answer": "2"},
+                "What is 2+2?": {"answer": "4"},
+            }
+        )
+    )
+    devset = [new_example("What is 1+1?", "2"), new_example("What is 2+2?", "4")]
+    program = Predict("question -> answer")
+    ev = Evaluate(
+        devset=devset,
+        metric=async_metric,
+        display_progress=False,
+    )
+    result = ev(program)
+    assert result.score == 100.0
 

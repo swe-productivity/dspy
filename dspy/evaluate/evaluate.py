@@ -1,9 +1,12 @@
 import csv
 import importlib
+import inspect
 import json
 import logging
 import types
 from typing import TYPE_CHECKING, Any, Callable
+
+from dspy.utils.syncify import run_async
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -169,7 +172,10 @@ class Evaluate:
 
         def process_item(example):
             prediction = program(**example.inputs())
-            score = metric(example, prediction)
+            if inspect.iscoroutinefunction(metric):
+                score = run_async(metric(example, prediction))
+            else:
+                score = metric(example, prediction)
             return prediction, score
 
         results = executor.execute(process_item, devset)

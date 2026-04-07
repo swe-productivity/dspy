@@ -21,6 +21,7 @@ from dspy.teleprompt.gepa.gepa_utils import (
 )
 from dspy.teleprompt.teleprompt import Teleprompter
 from dspy.utils.annotation import experimental
+from dspy.utils.syncify import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -610,13 +611,22 @@ class GEPA(Teleprompter):
                 captured_trace: "DSPyTrace",
             ) -> "ScoreWithFeedback":
                 trace_for_pred = [(predictor, predictor_inputs, predictor_output)]
-                o = self.metric_fn(
-                    module_inputs,
-                    module_outputs,
-                    captured_trace,
-                    pred_name,
-                    trace_for_pred,
-                )
+                if inspect.iscoroutinefunction(self.metric_fn):
+                    o = run_async(self.metric_fn(
+                        module_inputs,
+                        module_outputs,
+                        captured_trace,
+                        pred_name,
+                        trace_for_pred,
+                    ))
+                else:
+                    o = self.metric_fn(
+                        module_inputs,
+                        module_outputs,
+                        captured_trace,
+                        pred_name,
+                        trace_for_pred,
+                    )
                 if hasattr(o, "feedback"):
                     if o["feedback"] is None:
                         o["feedback"] = f"This trajectory got a score of {o['score']}."
