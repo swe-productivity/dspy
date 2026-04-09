@@ -8,7 +8,7 @@ from typing import Any, Literal, Union, get_args, get_origin
 
 import json_repair
 import pydantic
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from pydantic.fields import FieldInfo
 
 from dspy.adapters.types.base_type import Type as DspyType
@@ -211,12 +211,134 @@ def get_annotation_name(annotation):
         return f"{get_annotation_name(origin)}[{args_str}]"
 
 
+def _is_pydantic_model(annotation: Any) -> bool:
+    """Check if a type annotation is or contains a Pydantic BaseModel.
+
+    Handles:
+    - Direct BaseModel subclasses
+    - Union types containing BaseModel (including Optional)
+    - Generic types like List[Model], Dict[str, Model]
+
+    Args:
+        annotation: Type annotation to check
+
+    Returns:
+        True if annotation is or contains a Pydantic BaseModel
+    """
+    try:
+        # Direct check
+        if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
+            return True
+
+        # Handle Union/Optional types
+        origin = get_origin(annotation)
+        if origin is Union or (hasattr(types, 'UnionType') and origin is types.UnionType):
+            args = get_args(annotation)
+            return any(_is_pydantic_model(arg) for arg in args if arg is not type(None))
+
+        # Handle generic types (List[Model], Dict[str, Model], etc.)
+        if origin is not None:
+            args = get_args(annotation)
+            return any(_is_pydantic_model(arg) for arg in args)
+
+    except (TypeError, ImportError):
+        pass
+
+    return False
+
+
+def extract_pydantic_field_descriptions(
+    model_class: type,
+    max_depth: int | None = None,
+    visited: set | None = None,
+    _indent_level: int = 1,
+) -> str:
+    """Extract field descriptions from a Pydantic model recursively.
+
+    Args:
+        model_class: Pydantic BaseModel class
+        max_depth: Maximum recursion depth. None means no limit (default).
+                   The visited set prevents infinite recursion from circular references.
+        visited: Internal use - tracks visited models to prevent circular references
+        _indent_level: Internal use - current indentation level
+
+    Returns:
+        Formatted string with field descriptions
+
+    Example:
+        >>> class Address(BaseModel):
+        ...     street: str = Field(description="Street address")
+        ...     city: str = Field(description="City name")
+        ...
+        >>> class Person(BaseModel):
+        ...     name: str = Field(description="Full name of the person")
+        ...     age: int = Field(description="Age in years")
+        ...     address: Address = Field(description="Home address")
+        ...
+        >>> print(extract_pydantic_field_descriptions(Person))
+            - name (str): Full name of the person
+            - age (int): Age in years
+            - address (Address): Home address
+                - street (str): Street address
+                - city (str): City name
+    """
+    if visited is None:
+        visited = set()
+
+    if model_class in visited or (max_depth is not None and max_depth <= 0):
+        return ""
+
+    visited = visited | {model_class}
+    indent = "    " * _indent_level
+    lines = []
+
+    for field_name, field_info in model_class.model_fields.items():
+        field_type = get_annotation_name(field_info.annotation)
+        line = f"{indent}- {field_name} ({field_type})"
+
+        if field_info.description:
+            line += f": {field_info.description}"
+
+        lines.append(line)
+
+        if _is_pydantic_model(field_info.annotation):
+            for nested_model in _extract_models_from_annotation(field_info.annotation):
+                next_depth = None if max_depth is None else max_depth - 1
+                nested = extract_pydantic_field_descriptions(
+                    nested_model, next_depth, visited, _indent_level + 1
+                )
+                if nested:
+                    lines.append(nested)
+
+    return "\n".join(lines)
+
+
+def _extract_models_from_annotation(annotation: Any) -> list[type]:
+    """Extract Pydantic model classes from a type annotation."""
+    if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
+        return [annotation]
+
+    models = []
+    if (origin := get_origin(annotation)) is not None:
+        for arg in get_args(annotation):
+            if arg is not type(None):
+                models.extend(_extract_models_from_annotation(arg))
+
+    return models
+
+
 def get_field_description_string(fields: dict) -> str:
     field_descriptions = []
     for idx, (k, v) in enumerate(fields.items()):
         field_message = f"{idx + 1}. `{k}`"
         field_message += f" ({get_annotation_name(v.annotation)})"
         desc = v.json_schema_extra["desc"] if v.json_schema_extra["desc"] != f"${{{k}}}" else ""
+
+        if _is_pydantic_model(v.annotation):
+            for model_class in _extract_models_from_annotation(v.annotation):
+                nested_desc = extract_pydantic_field_descriptions(model_class)
+                if nested_desc:
+                    desc += f"\n    Fields:\n{nested_desc}"
 
         custom_types = DspyType.extract_custom_type_from_annotation(v.annotation)
         for custom_type in custom_types:
