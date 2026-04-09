@@ -7,7 +7,7 @@ from typing import Optional, Union, List, Dict
 import dspy
 from dspy.adapters.chat_adapter import ChatAdapter
 from dspy.adapters.utils import (
-    is_pydantic_model,
+    __is_pydantic_model,
     extract_pydantic_field_descriptions,
     get_field_description_string,
 )
@@ -25,77 +25,64 @@ class AnotherModel(BaseModel):
     value: int
 
 
-def test_is_pydantic_model_with_direct_model():
-    """Test that is_pydantic_model returns True for a direct Pydantic model."""
-    assert is_pydantic_model(SimpleModel) is True
+def test__is_pydantic_model_with_direct_model():
+    assert _is_pydantic_model(SimpleModel) is True
 
 
-def test_is_pydantic_model_with_primitive_types():
-    """Test that is_pydantic_model returns False for primitive types."""
-    assert is_pydantic_model(str) is False
-    assert is_pydantic_model(int) is False
-    assert is_pydantic_model(float) is False
-    assert is_pydantic_model(bool) is False
-    assert is_pydantic_model(list) is False
-    assert is_pydantic_model(dict) is False
+def test__is_pydantic_model_with_primitive_types():
+    assert _is_pydantic_model(str) is False
+    assert _is_pydantic_model(int) is False
+    assert _is_pydantic_model(float) is False
+    assert _is_pydantic_model(bool) is False
+    assert _is_pydantic_model(list) is False
+    assert _is_pydantic_model(dict) is False
 
 
-def test_is_pydantic_model_with_optional_model():
-    """Test that is_pydantic_model returns True for Optional[Model]."""
-    assert is_pydantic_model(Optional[SimpleModel]) is True
+def test__is_pydantic_model_with_optional_model():
+    assert _is_pydantic_model(Optional[SimpleModel]) is True
 
 
-def test_is_pydantic_model_with_optional_primitive():
-    """Test that is_pydantic_model returns False for Optional[primitive]."""
-    assert is_pydantic_model(Optional[str]) is False
-    assert is_pydantic_model(Optional[int]) is False
+def test__is_pydantic_model_with_optional_primitive():
+    assert _is_pydantic_model(Optional[str]) is False
+    assert _is_pydantic_model(Optional[int]) is False
 
 
-def test_is_pydantic_model_with_union_containing_model():
-    """Test that is_pydantic_model returns True for Union containing a model."""
-    assert is_pydantic_model(Union[SimpleModel, str]) is True
-    assert is_pydantic_model(Union[str, SimpleModel]) is True
-    assert is_pydantic_model(Union[SimpleModel, AnotherModel]) is True
+def test__is_pydantic_model_with_union_containing_model():
+    assert _is_pydantic_model(Union[SimpleModel, str]) is True
+    assert _is_pydantic_model(Union[str, SimpleModel]) is True
+    assert _is_pydantic_model(Union[SimpleModel, AnotherModel]) is True
 
 
-def test_is_pydantic_model_with_union_without_model():
-    """Test that is_pydantic_model returns False for Union without models."""
-    assert is_pydantic_model(Union[str, int]) is False
-    assert is_pydantic_model(Union[str, int, float]) is False
+def test__is_pydantic_model_with_union_without_model():
+    assert _is_pydantic_model(Union[str, int]) is False
+    assert _is_pydantic_model(Union[str, int, float]) is False
 
 
-def test_is_pydantic_model_with_list_of_models():
-    """Test that is_pydantic_model returns True for List[Model]."""
-    assert is_pydantic_model(List[SimpleModel]) is True
+def test__is_pydantic_model_with_list_of_models():
+    assert _is_pydantic_model(List[SimpleModel]) is True
 
 
-def test_is_pydantic_model_with_list_of_primitives():
-    """Test that is_pydantic_model returns False for List[primitive]."""
-    assert is_pydantic_model(List[str]) is False
-    assert is_pydantic_model(List[int]) is False
+def test__is_pydantic_model_with_list_of_primitives():
+    assert _is_pydantic_model(List[str]) is False
+    assert _is_pydantic_model(List[int]) is False
 
 
-def test_is_pydantic_model_with_dict_of_models():
-    """Test that is_pydantic_model returns True for Dict with model values."""
-    assert is_pydantic_model(Dict[str, SimpleModel]) is True
+def test__is_pydantic_model_with_dict_of_models():
+    assert _is_pydantic_model(Dict[str, SimpleModel]) is True
 
 
-def test_is_pydantic_model_with_dict_of_primitives():
-    """Test that is_pydantic_model returns False for Dict with primitive values."""
-    assert is_pydantic_model(Dict[str, str]) is False
-    assert is_pydantic_model(Dict[str, int]) is False
+def test__is_pydantic_model_with_dict_of_primitives():
+    assert _is_pydantic_model(Dict[str, str]) is False
+    assert _is_pydantic_model(Dict[str, int]) is False
 
 
-def test_is_pydantic_model_with_nested_generics():
-    """Test that is_pydantic_model handles nested generic types."""
-    assert is_pydantic_model(List[Optional[SimpleModel]]) is True
-    assert is_pydantic_model(Dict[str, Optional[SimpleModel]]) is True
-    assert is_pydantic_model(Optional[List[SimpleModel]]) is True
+def test__is_pydantic_model_with_nested_generics():
+    assert _is_pydantic_model(List[Optional[SimpleModel]]) is True
+    assert _is_pydantic_model(Dict[str, Optional[SimpleModel]]) is True
+    assert _is_pydantic_model(Optional[List[SimpleModel]]) is True
 
 
 def test_extract_simple_model_descriptions():
-    """Test extracting descriptions from a simple Pydantic model."""
-
     class SearchQuery(BaseModel):
         term: str = Field(description="search term to extract topics from")
         grade: int = Field(description="grade level of the audience")
@@ -112,8 +99,6 @@ def test_extract_simple_model_descriptions():
 
 
 def test_extract_model_without_descriptions():
-    """Test extracting from a model without field descriptions."""
-
     class BasicModel(BaseModel):
         name: str
         age: int
@@ -125,8 +110,6 @@ def test_extract_model_without_descriptions():
 
 
 def test_extract_nested_model_descriptions():
-    """Test extracting descriptions from nested Pydantic models."""
-
     class Address(BaseModel):
         street: str = Field(description="Street name")
         city: str = Field(description="City name")
@@ -182,8 +165,6 @@ def test_extract_respects_max_depth():
 
 
 def test_extract_with_optional_model():
-    """Test extracting from Optional[Model] field."""
-
     class Inner(BaseModel):
         value: str = Field(description="Inner value")
 
@@ -198,8 +179,6 @@ def test_extract_with_optional_model():
 
 
 def test_extract_with_list_of_models():
-    """Test extracting from List[Model] field."""
-
     class Item(BaseModel):
         name: str = Field(description="Item name")
 

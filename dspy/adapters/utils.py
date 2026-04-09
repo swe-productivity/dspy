@@ -8,7 +8,7 @@ from typing import Any, Literal, Union, get_args, get_origin
 
 import json_repair
 import pydantic
-from pydantic import TypeAdapter
+from pydantic import BaseModel, TypeAdapter
 from pydantic.fields import FieldInfo
 
 from dspy.adapters.types.base_type import Type as DspyType
@@ -211,7 +211,7 @@ def get_annotation_name(annotation):
         return f"{get_annotation_name(origin)}[{args_str}]"
 
 
-def is_pydantic_model(annotation: Any) -> bool:
+def _is_pydantic_model(annotation: Any) -> bool:
     """Check if a type annotation is or contains a Pydantic BaseModel.
 
     Handles:
@@ -226,8 +226,6 @@ def is_pydantic_model(annotation: Any) -> bool:
         True if annotation is or contains a Pydantic BaseModel
     """
     try:
-        from pydantic import BaseModel
-
         # Direct check
         if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
             return True
@@ -236,12 +234,12 @@ def is_pydantic_model(annotation: Any) -> bool:
         origin = get_origin(annotation)
         if origin is Union or (hasattr(types, 'UnionType') and origin is types.UnionType):
             args = get_args(annotation)
-            return any(is_pydantic_model(arg) for arg in args if arg is not type(None))
+            return any(_is_pydantic_model(arg) for arg in args if arg is not type(None))
 
         # Handle generic types (List[Model], Dict[str, Model], etc.)
         if origin is not None:
             args = get_args(annotation)
-            return any(is_pydantic_model(arg) for arg in args)
+            return any(_is_pydantic_model(arg) for arg in args)
 
     except (TypeError, ImportError):
         pass
@@ -251,30 +249,46 @@ def is_pydantic_model(annotation: Any) -> bool:
 
 def extract_pydantic_field_descriptions(
     model_class: type,
-    max_depth: int = 3,
-    _visited: set | None = None,
+    max_depth: int | None = None,
+    visited: set | None = None,
     _indent_level: int = 1,
 ) -> str:
     """Extract field descriptions from a Pydantic model recursively.
 
     Args:
         model_class: Pydantic BaseModel class
-        max_depth: Maximum recursion depth
-        _visited: Internal use - tracks visited models
+        max_depth: Maximum recursion depth. None means no limit (default).
+                   The visited set prevents infinite recursion from circular references.
+        visited: Internal use - tracks visited models to prevent circular references
         _indent_level: Internal use - current indentation level
 
     Returns:
         Formatted string with field descriptions
+
+    Example:
+        >>> class Address(BaseModel):
+        ...     street: str = Field(description="Street address")
+        ...     city: str = Field(description="City name")
+        ...
+        >>> class Person(BaseModel):
+        ...     name: str = Field(description="Full name of the person")
+        ...     age: int = Field(description="Age in years")
+        ...     address: Address = Field(description="Home address")
+        ...
+        >>> print(extract_pydantic_field_descriptions(Person))
+            - name (str): Full name of the person
+            - age (int): Age in years
+            - address (Address): Home address
+                - street (str): Street address
+                - city (str): City name
     """
-    from pydantic import BaseModel
+    if visited is None:
+        visited = set()
 
-    if _visited is None:
-        _visited = set()
-
-    if max_depth <= 0 or model_class in _visited:
+    if model_class in visited or (max_depth is not None and max_depth <= 0):
         return ""
 
-    _visited = _visited | {model_class}
+    visited = visited | {model_class}
     indent = "    " * _indent_level
     lines = []
 
@@ -287,10 +301,11 @@ def extract_pydantic_field_descriptions(
 
         lines.append(line)
 
-        if is_pydantic_model(field_info.annotation):
+        if _is_pydantic_model(field_info.annotation):
             for nested_model in _extract_models_from_annotation(field_info.annotation):
+                next_depth = None if max_depth is None else max_depth - 1
                 nested = extract_pydantic_field_descriptions(
-                    nested_model, max_depth - 1, _visited, _indent_level + 1
+                    nested_model, next_depth, visited, _indent_level + 1
                 )
                 if nested:
                     lines.append(nested)
@@ -300,14 +315,11 @@ def extract_pydantic_field_descriptions(
 
 def _extract_models_from_annotation(annotation: Any) -> list[type]:
     """Extract Pydantic model classes from a type annotation."""
-    from pydantic import BaseModel
-
     if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
         return [annotation]
 
     models = []
-    origin = get_origin(annotation)
-    if origin is not None:
+    if (origin := get_origin(annotation)) is not None:
         for arg in get_args(annotation):
             if arg is not type(None):
                 models.extend(_extract_models_from_annotation(arg))
@@ -322,9 +334,9 @@ def get_field_description_string(fields: dict) -> str:
         field_message += f" ({get_annotation_name(v.annotation)})"
         desc = v.json_schema_extra["desc"] if v.json_schema_extra["desc"] != f"${{{k}}}" else ""
 
-        if is_pydantic_model(v.annotation):
+        if _is_pydantic_model(v.annotation):
             for model_class in _extract_models_from_annotation(v.annotation):
-                nested_desc = extract_pydantic_field_descriptions(model_class, max_depth=3)
+                nested_desc = extract_pydantic_field_descriptions(model_class)
                 if nested_desc:
                     desc += f"\n    Fields:\n{nested_desc}"
 
