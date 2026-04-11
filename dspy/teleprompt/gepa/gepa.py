@@ -48,11 +48,14 @@ class GEPAFeedbackMetric(Protocol):
         - trace: Optional. The trace of the program's execution.
         - pred_name: Optional. The name of the target predictor currently being optimized by GEPA, for which
             the feedback is being requested.
-        - pred_trace: Optional. The trace of the target predictor's execution GEPA is seeking feedback for.
+        - pred_trace: Optional. The full execution trace showing all predictor calls in chronological order.
+            This provides the complete program trajectory, allowing metrics to analyze the sequence of
+            predictor interactions. The current predictor being optimized (identified by pred_name) will
+            be present in this trace along with all preceding predictors.
 
         Note the `pred_name` and `pred_trace` arguments. During optimization, GEPA will call the metric to obtain
         feedback for individual predictors being optimized. GEPA provides the name of the predictor in `pred_name`
-        and the sub-trace (of the trace) corresponding to the predictor in `pred_trace`.
+        and the full execution trace in `pred_trace`.
         If available at the predictor level, the metric should return dspy.Prediction(score: float, feedback: str)
         corresponding to the predictor.
         If not available at the predictor level, the metric can also return a text feedback at the program level
@@ -181,14 +184,18 @@ class GEPA(Teleprompter):
         This function is called with the following arguments:
         - gold: The gold example.
         - pred: The predicted output.
-        - trace: Optional. The trace of the program's execution.
+        - trace: Optional. The full trajectory of the program's execution.
         - pred_name: Optional. The name of the target predictor currently being optimized by GEPA, for which
             the feedback is being requested.
-        - pred_trace: Optional. The trace of the target predictor's execution GEPA is seeking feedback for.
+        - pred_trace: Optional. The full execution trace showing all predictor calls in chronological order.
+            This provides the complete program trajectory, allowing metrics to analyze the sequence of
+            predictor interactions. The current predictor being optimized (identified by pred_name) will
+            be present in this trace along with all preceding predictors.
 
         Note the `pred_name` and `pred_trace` arguments. During optimization, GEPA will call the metric to obtain
         feedback for individual predictors being optimized. GEPA provides the name of the predictor in `pred_name`
-        and the sub-trace (of the trace) corresponding to the predictor in `pred_trace`.
+        and the full execution trace in `pred_trace`. You can analyze the sequence of predictor calls to provide
+        context-aware feedback.
         If available at the predictor level, the metric should return {'score': float, 'feedback': str} corresponding
         to the predictor.
         If not available at the predictor level, the metric can also return a text feedback at the program level
@@ -197,6 +204,34 @@ class GEPA(Teleprompter):
         f"This trajectory got a score of {score}."
         \"""
         ...
+    ```
+
+    Example of a trajectory-aware metric that analyzes the full program execution:
+    ```
+    def trajectory_metric(
+        gold: Example,
+        pred: Prediction,
+        trace: Optional[DSPyTrace] = None,
+        pred_name: Optional[str] = None,
+        pred_trace: Optional[DSPyTrace] = None,
+    ) -> ScoreWithFeedback:
+        # pred_trace now contains the full execution trace
+        if pred_trace and len(pred_trace) > 1:
+            # Access earlier predictors for context
+            feedback_parts = []
+            for i, (predictor, inputs, outputs) in enumerate(pred_trace):
+                if hasattr(predictor, 'signature'):
+                    step_info = f"Step {i}: {predictor.signature.instructions[:50]}"
+                    feedback_parts.append(step_info)
+
+            context = "\\n".join(feedback_parts)
+            score = compute_score(gold, pred)  # Your scoring logic
+            feedback = f"Execution trace:\\n{context}\\nFinal score: {score}"
+            return dspy.Prediction(score=score, feedback=feedback)
+
+        # Simple fallback for single-predictor programs
+        score = compute_score(gold, pred)
+        return dspy.Prediction(score=score, feedback="Single predictor execution")
     ```
 
     GEPA can also be used as a batch inference-time search strategy, by passing `valset=trainset, track_stats=True, track_best_outputs=True`, and using the
@@ -609,7 +644,20 @@ class GEPA(Teleprompter):
                 module_outputs: Prediction,
                 captured_trace: "DSPyTrace",
             ) -> "ScoreWithFeedback":
-                trace_for_pred = [(predictor, predictor_inputs, predictor_output)]
+                # Build pred_trace: trace up to and including the current predictor's entry
+                # This provides preceding predictors + current predictor, excluding later predictors
+                trace_for_pred = None
+                if captured_trace:
+                    # Find the entry matching the current predictor call and slice up to it
+                    for idx, (pred, inputs, outputs) in enumerate(captured_trace):
+                        if inputs is predictor_inputs and outputs is predictor_output:
+                            trace_for_pred = captured_trace[: idx + 1]
+                            break
+                    if trace_for_pred is None:
+                        trace_for_pred = captured_trace
+                else:
+                    trace_for_pred = [(predictor, predictor_inputs, predictor_output)]
+
                 o = self.metric_fn(
                     module_inputs,
                     module_outputs,

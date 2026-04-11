@@ -521,3 +521,70 @@ def test_alternating_half_component_selector():
             # Odd iteration should select second half: ["generator"]
             assert "generator" in selection["selected"], f"Odd iteration {selection['iteration']} should include generator"
             assert "classifier" not in selection["selected"], f"Odd iteration {selection['iteration']} should not include classifier"
+
+
+def test_metric_receives_full_trajectory():
+    """Test that metrics receive the full program trajectory in pred_trace."""
+    trajectory_lengths = []
+    pred_traces_received = []
+
+    def trajectory_aware_metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
+        """Metric that captures pred_trace for verification."""
+        if pred_trace is not None:
+            trajectory_lengths.append(len(pred_trace))
+            pred_traces_received.append(pred_trace)
+        # Return non-perfect score to trigger reflection
+        return dspy.Prediction(score=0.8, feedback="Test feedback for improvement")
+
+    class MultiStepModule(dspy.Module):
+        def __init__(self):
+            super().__init__()
+            self.step1 = dspy.Predict("input -> intermediate")
+            self.step2 = dspy.Predict("intermediate -> output")
+
+        def forward(self, input):
+            result1 = self.step1(input=input)
+            result2 = self.step2(intermediate=result1.intermediate)
+            return result2
+
+    task_lm = DummyLM([{"intermediate": "step1_result", "output": "final_result"}] * 20)
+    reflection_lm = DummyLM([{"improved_instruction": "Better instruction"}] * 10)
+    trainset = [dspy.Example(input="test", output="final_result").with_inputs("input")]
+
+    with dspy.context(lm=task_lm):
+        optimizer = dspy.GEPA(
+            metric=trajectory_aware_metric,
+            reflection_lm=reflection_lm,
+            max_metric_calls=12,
+            skip_perfect_score=False,  # Don't skip examples to ensure reflection happens
+        )
+        result = optimizer.compile(MultiStepModule(), trainset=trainset, valset=trainset)
+
+    # Verify that we received trajectories
+    assert len(trajectory_lengths) > 0, "Should have received at least one trajectory"
+
+    # For multi-predictor programs, at least some trajectories should have multiple elements
+    # This verifies that we're getting the full trace, not just single-element traces
+    multi_step_traces = [length for length in trajectory_lengths if length > 1]
+    assert len(multi_step_traces) > 0, "Should have received trajectories with multiple predictors"
+
+
+def test_backward_compatible_simple_metric():
+    """Test that simple metrics that don't use pred_trace still work."""
+    def simple_metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
+        """Simple metric that ignores pred_trace entirely."""
+        return dspy.Prediction(score=1.0 if pred.output == gold.output else 0.0, feedback="Simple feedback")
+
+    task_lm = DummyLM([{"output": "correct"}] * 20)
+    reflection_lm = DummyLM([{"improved_instruction": "Better instruction"}] * 10)
+    trainset = [dspy.Example(input="test", output="correct").with_inputs("input")]
+
+    with dspy.context(lm=task_lm):
+        optimizer = dspy.GEPA(
+            metric=simple_metric,
+            reflection_lm=reflection_lm,
+            max_metric_calls=8,
+        )
+        result = optimizer.compile(SimpleModule("input -> output"), trainset=trainset, valset=trainset)
+
+    assert result is not None, "Simple metric should still work with the changes"
