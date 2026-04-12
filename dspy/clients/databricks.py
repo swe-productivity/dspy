@@ -59,7 +59,7 @@ class DatabricksProvider(Provider):
         Args:
             model: Name of the model as stored in the databricks store
             data_format: One of TrainDataFormat.CHAT or TrainDataFormat.COMPLETION based on what the model's supposed to do
-            databricks_host: URL of databricks host. Useful in case of hosted runtime
+            databricks_host: URL of databricks host.
             databricks_token: Databrick token
             deploy_timeout: Time in seconds. Deployment is cancelled if this time period exceeds. (Default: 900s)
         """
@@ -327,10 +327,6 @@ def _create_directory_in_databricks_unity_catalog(w: "WorkspaceClient", databric
 
 
 def _save_data_to_local_file(train_data: list[dict[str, Any]], data_format: TrainDataFormat):
-    """
-    Save train_data to a local file in JSON lines format with follwing filename: "finetuning_{UUID}.jsonl". UUID
-    here is based on UUID Version 4 of RFC 9562
-    """
     import uuid
 
     file_name = f"finetuning_{uuid.uuid4()}.jsonl"
@@ -350,11 +346,6 @@ def _save_data_to_local_file(train_data: list[dict[str, Any]], data_format: Trai
 
 
 def _validate_chat_data(data: dict[str, Any]):
-    """
-    This function raises a ValueError exception if data is malformed in these ways:
-    1. Data must be a dict with a 'messages' key
-    2. Value of 'messages' key must be a dict with 'role' and 'content' keys
-    """
     if "messages" not in data:
         raise ValueError(
             "Each finetuning data must be a dict with a 'messages' key when `task=CHAT_COMPLETION`, but "
@@ -377,11 +368,6 @@ def _validate_chat_data(data: dict[str, Any]):
 
 
 def _validate_completion_data(data: dict[str, Any]):
-    """
-    This function raises a ValueError exception if data is malformed in these ways:
-    1. Data must be a dict with a 'prompt' key.
-    2. Value of 'prompt' key must be a dict with 'response' and 'completion' keys
-    """
     if "prompt" not in data:
         raise ValueError(
             "Each finetuning data must be a dict with a 'prompt' key when `task=INSTRUCTION_FINETUNE`, but "

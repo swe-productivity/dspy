@@ -33,10 +33,10 @@ class Avatar(dspy.Module):
     """
     def __init__(
         self,
-        signature,
-        tools,
-        max_iters=3,
-        verbose=False,
+        signature: Type[dspy.Signature],
+        tools: list[dspy.Tool],
+        max_iters: int = 3,
+        verbose: bool = False,
     ):
         self.signature = ensure_signature(signature)
         self.input_fields = self.signature.input_fields

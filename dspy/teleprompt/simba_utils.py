@@ -1,5 +1,3 @@
-## Miscellaneous utilities for the simba optimizer
-
 import inspect
 import logging
 import textwrap
@@ -41,7 +39,7 @@ def wrap_program(program: dspy.Module, metric: Callable):
         program (dspy.Module): dspy.Module that contains instructions to run the LM.
         metric (Callable[str,str]): A function that takes examples from your data and output of the LM and compares them
     Returns:
-        A functions that returns a dict with the following keys when called: {
+        A functions that take a dspy.Example as argument and returns a dict with the following keys when called: {
             "prediction",
             "trace",
             "score",
@@ -49,7 +47,7 @@ def wrap_program(program: dspy.Module, metric: Callable):
             "output_metadata",
         }
     """
-    def wrapped_program(example):
+    def wrapped_program(example: dspy.Example):
         with dspy.context(trace=[]):
             prediction, trace, score = None, None, 0.0
             try:
@@ -87,7 +85,7 @@ def wrap_program(program: dspy.Module, metric: Callable):
 
     return wrapped_program
 
-def append_a_demo(demo_input_field_maxlen):
+def append_a_demo(demo_input_field_maxlen: int):
     """
     One of the strategies (chosen at random) of the SIMBA optimizer. The other one is append_a_rule
     Args:
@@ -135,7 +133,7 @@ def append_a_demo(demo_input_field_maxlen):
     return append_a_demo_
 
 
-def append_a_rule(bucket, system, **kwargs):
+def append_a_rule(bucket: list[dict], system: dspy.Module, **kwargs):
     """
     One of the strategies (chosen at random) of the SIMBA optimizer. The other one is append_a_demo
     Args:
@@ -250,7 +248,7 @@ class OfferFeedback(dspy.Signature):
         "like the successful trajectory rather than the lower-scoring trajectory."
     )
 
-def inspect_modules(program):
+def inspect_modules(program: dspy.Module):
     """
     Args:
         program (dspy.Module): A dspy.Module
