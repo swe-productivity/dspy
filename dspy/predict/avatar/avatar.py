@@ -20,12 +20,23 @@ def get_number_with_suffix(number: int) -> str:
 
 
 class Avatar(dspy.Module):
+    """
+    Module based on the Avatar Optimizer
+
+    This modules implements the Avatar optimizer (https://arxiv.org/pdf/2406.11200) that allows effective use of tools using contrastive reasoning with batch-wise sampling. See paper for details.
+
+    Args:
+        signature (Type[dspy.Signature]): The signature of the module.
+        tools (list[dspy.Tool]): a list of dspy tools to be run
+        max_iters (Int): The maximum number of iterations to retry code generation and execution.
+        verbose (bool): Toggle verbosity
+    """
     def __init__(
         self,
-        signature,
-        tools,
-        max_iters=3,
-        verbose=False,
+        signature: Type[dspy.Signature],
+        tools: list[dspy.Tool],
+        max_iters: int = 3,
+        verbose: bool = False,
     ):
         self.signature = ensure_signature(signature)
         self.input_fields = self.signature.input_fields

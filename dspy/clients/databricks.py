@@ -55,6 +55,14 @@ class DatabricksProvider(Provider):
         databricks_token: str | None = None,
         deploy_timeout: int = 900,
     ):
+        """
+        Args:
+            model: Name of the model as stored in the databricks store
+            data_format: One of TrainDataFormat.CHAT or TrainDataFormat.COMPLETION based on what the model's supposed to do
+            databricks_host: URL of databricks host.
+            databricks_token: Databrick token
+            deploy_timeout: Time in seconds. Deployment is cancelled if this time period exceeds. (Default: 900s)
+        """
         workspace_client = _get_workspace_client()
         model_version = next(workspace_client.model_versions.list(model)).version
 
@@ -172,6 +180,22 @@ class DatabricksProvider(Provider):
         train_data_format: TrainDataFormat | str | None = "chat",
         train_kwargs: dict[str, Any] | None = None,
     ) -> str:
+        """
+        Args:
+            job (TrainingJobDatabricks): Training job to be finetuned
+            model: Model name
+            train_data (list[dict[str, Any]]): Training data
+            train_data_format: One of "chat" or "completion" (Default: "chat")
+            train_kwargs: Can take following options:
+                1. train_data_path: path to training data in Databricks provider
+                2. register_to: Required for finetune on Databricks
+                3. databricks_host (Optional): Databricks host URL
+                4. databricks_token (Optional): Databricks Token
+                5. skip_deploy (Optional): Skip deploying the model. (Default: False)
+                6. deploy_timeout (Optional): Time in seconds. (Default: 900s)
+        Returns:
+            str: Path to the model in the format "databricks/{job.endpoint_name}"
+        """
         if isinstance(train_data_format, str):
             if train_data_format == "chat":
                 train_data_format = TrainDataFormat.CHAT
